@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pittsburgh Bike Share &amp; Routes</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --border: #e3e1db;
+    --text: #23231f;
+    --muted: #6b6a63;
+    --accent: #1f6f4a;
+    --accent-soft: #e6f2ec;
+    --blue: #2f5f8f;
+    --blue-soft: #e8eef5;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 40px 24px 28px; text-align: center; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 15px; max-width: 640px; margin: 0 auto; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+  section { margin-bottom: 56px; }
+  section > h2 { font-size: 20px; margin: 0 0 6px; }
+  section > .section-sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+
+  /* --- Map picker cards --- */
+  .map-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .map-card {
+    display: block; text-decoration: none; color: inherit; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease; cursor: pointer;
+  }
+  .map-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+  .map-card .icon { font-size: 28px; margin-bottom: 10px; display: block; }
+  .map-card h3 { margin: 0 0 6px; font-size: 16px; }
+  .map-card p { margin: 0 0 14px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .map-card .cta { font-size: 13px; font-weight: 600; }
+  .map-card.live .cta { color: var(--accent); }
+  .map-card.forecast .cta { color: var(--blue); }
+  .map-card.overview .cta { color: #8a5a1f; }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 100px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .badge.live { background: var(--accent-soft); color: var(--accent); }
+  .badge.forecast { background: var(--blue-soft); color: var(--blue); }
+  .badge.overview { background: #f7ecdc; color: #8a5a1f; }
+
+  /* --- Chart browser --- */
+  .chart-browser {
+    display: grid; grid-template-columns: 230px 1fr; gap: 0; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 14px; overflow: hidden; min-height: 520px;
+  }
+  .chart-nav { border-right: 1px solid var(--border); padding: 10px; overflow-y: auto; max-height: 640px; }
+  .chart-nav .group-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+    padding: 12px 10px 4px;
+  }
+  .chart-nav button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    padding: 8px 10px; border-radius: 8px; font-size: 13.5px; color: var(--text);
+    cursor: pointer; margin: 1px 0;
+  }
+  .chart-nav button:hover { background: var(--bg); }
+  .chart-nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .chart-main { padding: 24px; display: flex; flex-direction: column; }
+  .chart-main img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border); }
+  .chart-main .caption-title { font-size: 16px; font-weight: 600; margin: 16px 0 6px; }
+  .chart-main .caption-body { font-size: 14px; color: var(--muted); line-height: 1.6; margin: 0; }
+
+  @media (max-width: 700px) {
+    .chart-browser { grid-template-columns: 1fr; }
+    .chart-nav { border-right: none; border-bottom: 1px solid var(--border); max-height: 220px; }
+  }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pittsburgh Bike Share &amp; Routes</h1>
+  <p>An exploratory analysis of POGOH bike-share ridership, cycling infrastructure, and demand
+     prediction across Pittsburgh — built on public open data plus POGOH's live real-time feed.</p>
+</header>
+
+<main>
+
+  <section>
+    <h2>Explore the map</h2>
+    <p class="section-sub">Pick a view — links open the interactive map already set to that mode.</p>
+    <div class="map-cards">
+      <a class="map-card live" href="station_demand_prediction_map.html?mode=live">
+        <span class="badge live">Right now</span>
+        <span class="icon">🚲</span>
+        <h3>Current bike availability</h3>
+        <p>Live bikes/docks available per station, pulled straight from POGOH's real-time feed —
+           broken out by e-bike vs. classic bike.</p>
+        <span class="cta">Open live map →</span>
+      </a>
+      <a class="map-card forecast" href="station_demand_prediction_map.html?mode=predicted">
+        <span class="badge forecast">Next 7 days</span>
+        <span class="icon">📈</span>
+        <h3>Forecasted demand</h3>
+        <p>A Random Forest model's bi-hourly prediction of arrivals, departures, and simulated
+           bike-stock per station — scrub through the week with a slider.</p>
+        <span class="cta">Open forecast map →</span>
+      </a>
+      <a class="map-card overview" href="stations_and_lanes_map.html">
+        <span class="badge overview">Overview</span>
+        <span class="icon">🗺️</span>
+        <h3>Stations &amp; bike lanes</h3>
+        <p>All 60 POGOH stations plotted against Pittsburgh's on-street bike lane network.</p>
+        <span class="cta">Open overview map →</span>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Explore the data</h2>
+    <p class="section-sub">Pick a factor on the left to see the chart and what it shows &mdash;
+       or <a href="compare.html">build your own comparison of any two factors &rarr;</a></p>
+    <div class="chart-browser">
+      <nav class="chart-nav" id="chart-nav"></nav>
+      <div class="chart-main">
+        <img id="chart-img" src="" alt="">
+        <div class="caption-title" id="chart-title"></div>
+        <p class="caption-body" id="chart-caption"></p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Data: <a href="https://data.wprdc.org" target="_blank" rel="noopener">WPRDC</a> ·
+  <a href="https://pittsburgh.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json" target="_blank" rel="noopener">POGOH GBFS</a> ·
+  <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>
+</footer>
+
+<script>
+const CHARTS = [
+  { group: "Ridership growth", items: [
+    { file: "monthly_ridership_history.png", title: "Monthly ridership since launch",
+      caption: "POGOH's ridership grew roughly 16x from its May 2022 launch (6,119 trips) to its September 2025 peak (101,198 trips) — even the most recent August is 6x the very first August." },
+    { file: "ridership_vs_network_growth.png", title: "Ridership vs. station network size",
+      caption: "The station network grew from 37 to 60 stations by mid-2023, then held flat for three years. Ridership kept climbing well past that plateau — growth since 2023 reflects rising demand per station, not network expansion." },
+  ]},
+  { group: "Seasonality & trends", items: [
+    { file: "seasonality_by_year.png", title: "Seasonal pattern by year",
+      caption: "Every year follows the same shape — a peak in September/October, a trough in December/January — but each year's peaks and troughs both climb higher than the last, rather than the curve flattening out." },
+    { file: "daily_ridership.png", title: "Daily ridership (Mar-Aug 2026)",
+      caption: "Day-by-day trip counts across the first six months of trip data pulled for this project, showing clear day-to-day and weekly variation." },
+  ]},
+  { group: "Riders & trips", items: [
+    { file: "rider_mix_over_time.png", title: "Member vs. casual share over time",
+      caption: "Casual (pay-as-you-go) riders made up 35.5% of trips in POGOH's first six months; in its most recent six months that had fallen to 13.7% — a shift from novelty/tourist use toward a commuter-dominated system." },
+    { file: "rider_type_duration.png", title: "Rider type & trip duration",
+      caption: "Split of trips between member and casual riders, and the distribution of how long trips last." },
+    { file: "duration_over_time.png", title: "Median trip duration over time",
+      caption: "A falling median duration over time often signals a shift toward utilitarian/commute trips rather than leisure riding." },
+  ]},
+  { group: "Stations", items: [
+    { file: "top_stations.png", title: "Busiest stations",
+      caption: "The 15 busiest stations by trip starts — dominated by Oakland, Pittsburgh's university district (Pitt/CMU)." },
+  ]},
+  { group: "When is it busy?", items: [
+    { file: "demand_heatmap_dow_hour.png", title: "Day-of-week x hour heatmap",
+      caption: "Average trips on a typical day of each type. A sharp, narrow commute peak (4-6pm, weaker 7-9am bump) on weekdays vs. a broad, flatter midday bulge on weekends — a clear signature of a system now dominated by commuters rather than leisure riders, consistent with the falling casual-rider share seen elsewhere." },
+  ]},
+  { group: "Infrastructure", items: [
+    { file: "bike_lane_growth.png", title: "Bike lane mileage, 1980-2016",
+      caption: "Pittsburgh's on-street bike lane network predates POGOH by decades — this is the cumulative build-out BikePGH has tracked since 1980, well before the bike-share program launched into it." },
+  ]},
+  { group: "Demand model", items: [
+    { file: "demand_model_feature_importance.png", title: "What drives the demand model",
+      caption: "In the bi-hourly demand model, a station's own historical baseline and the time of year explain almost all the predictable variance — day-of-week barely matters for a system that's now mostly commuter-driven." },
+    { file: "demand_model_pred_vs_actual.png", title: "Model accuracy check",
+      caption: "How well the Random Forest's predicted arrivals track actual counts on held-out data, plus the relationship between temperature and ridership." },
+  ]},
+  { group: "Fleet", items: [
+    { file: "ebike_classic_split.png", title: "E-bike vs. classic bike mix",
+      caption: "A live snapshot of currently available bikes by type — roughly half the fleet available at any moment is electric-assist. This split only exists in POGOH's live feed; the historical trip data has no vehicle-type field, so past e-bike usage can't be reconstructed." },
+  ]},
+];
+
+const navEl = document.getElementById('chart-nav');
+const imgEl = document.getElementById('chart-img');
+const titleEl = document.getElementById('chart-title');
+const captionEl = document.getElementById('chart-caption');
+const buttons = [];
+
+CHARTS.forEach(group => {
+  const label = document.createElement('div');
+  label.className = 'group-label';
+  label.textContent = group.group;
+  navEl.appendChild(label);
+  group.items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.textContent = item.title;
+    btn.addEventListener('click', () => selectChart(item, btn));
+    navEl.appendChild(btn);
+    buttons.push(btn);
+  });
+});
+
+function selectChart(item, btn) {
+  imgEl.src = item.file;
+  imgEl.alt = item.title;
+  titleEl.textContent = item.title;
+  captionEl.textContent = item.caption;
+  buttons.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+selectChart(CHARTS[0].items[0], buttons[0]);
+</script>
+
+</body>
+</html>

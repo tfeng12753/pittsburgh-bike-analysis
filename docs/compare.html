@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare Factors — Pittsburgh Bike Share</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --border: #e3e1db; --text: #23231f; --muted: #6b6a63;
+    --accent: #1f6f4a; --a-color: #2f5f8f; --b-color: #d1622a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  header { padding: 28px 24px 16px; text-align: center; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0 0 6px; font-size: 24px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  header a { color: var(--accent); text-decoration: none; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
+  }
+  .control-group { display: flex; flex-direction: column; gap: 4px; }
+  .control-group label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+  select {
+    font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: white; color: var(--text); min-width: 200px;
+  }
+  .mode-toggle { display: flex; gap: 6px; }
+  .mode-toggle button {
+    font-size: 13px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: white; color: var(--text); cursor: pointer;
+  }
+  .mode-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .chart-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  #chart-canvas-wrap { position: relative; height: 420px; }
+  .stat-line { margin-top: 14px; font-size: 14px; color: var(--muted); text-align: center; }
+  .stat-line b { color: var(--text); }
+  @media (max-width: 600px) {
+    .controls { flex-direction: column; align-items: stretch; }
+    select { min-width: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Compare any two factors</h1>
+  <p>Daily ridership, weather, and rider-mix data, May 2022 &ndash; Aug 2026 &middot; <a href="index.html">&larr; back to homepage</a></p>
+</header>
+
+<main>
+  <div class="controls">
+    <div class="control-group">
+      <label>Factor A</label>
+      <select id="factorA"></select>
+    </div>
+    <div class="control-group">
+      <label>Factor B</label>
+      <select id="factorB"></select>
+    </div>
+    <div class="control-group">
+      <label>View</label>
+      <div class="mode-toggle">
+        <button id="mode-timeseries" class="active">Time series</button>
+        <button id="mode-scatter">Scatter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-panel">
+    <div id="chart-canvas-wrap"><canvas id="chart-canvas"></canvas></div>
+    <div class="stat-line" id="stat-line"></div>
+  </div>
+</main>
+
+<script>
+let DATA = null;
+let chart = null;
+let mode = 'timeseries';
+
+fetch('data/comparison_dataset.json').then(r => r.json()).then(d => {
+  DATA = d;
+  const keys = Object.keys(d.metrics);
+  const selA = document.getElementById('factorA');
+  const selB = document.getElementById('factorB');
+  keys.forEach(k => {
+    selA.appendChild(new Option(d.metrics[k], k));
+    selB.appendChild(new Option(d.metrics[k], k));
+  });
+  selA.value = 'trips';
+  selB.value = 'temp_avg_c';
+  render();
+});
+
+function pearson(xs, ys) {
+  const pairs = xs.map((x, i) => [x, ys[i]]).filter(([x, y]) => x != null && y != null && !isNaN(x) && !isNaN(y));
+  const n = pairs.length;
+  if (n < 3) return null;
+  const mx = pairs.reduce((s, p) => s + p[0], 0) / n;
+  const my = pairs.reduce((s, p) => s + p[1], 0) / n;
+  let num = 0, dx2 = 0, dy2 = 0;
+  for (const [x, y] of pairs) {
+    const dx = x - mx, dy = y - my;
+    num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+  }
+  const denom = Math.sqrt(dx2 * dy2);
+  return denom === 0 ? null : num / denom;
+}
+
+function correlationLabel(r) {
+  if (r === null) return 'not enough data';
+  const abs = Math.abs(r);
+  const strength = abs >= 0.7 ? 'strong' : abs >= 0.4 ? 'moderate' : abs >= 0.2 ? 'weak' : 'negligible';
+  const direction = r > 0 ? 'positive' : 'negative';
+  return `${strength} ${direction} (r = ${r.toFixed(2)})`;
+}
+
+function render() {
+  if (!DATA) return;
+  const keyA = document.getElementById('factorA').value;
+  const keyB = document.getElementById('factorB').value;
+  const labelA = DATA.metrics[keyA];
+  const labelB = DATA.metrics[keyB];
+  const seriesA = DATA.series[keyA];
+  const seriesB = DATA.series[keyB];
+
+  if (chart) chart.destroy();
+  const ctx = document.getElementById('chart-canvas').getContext('2d');
+
+  if (mode === 'timeseries') {
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: DATA.dates,
+        datasets: [
+          { label: labelA, data: seriesA, borderColor: '#2f5f8f', backgroundColor: '#2f5f8f',
+            yAxisID: 'yA', pointRadius: 0, borderWidth: 1.3, spanGaps: true },
+          { label: labelB, data: seriesB, borderColor: '#d1622a', backgroundColor: '#d1622a',
+            yAxisID: 'yB', pointRadius: 0, borderWidth: 1.3, spanGaps: true },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { ticks: { maxTicksLimit: 12 } },
+          yA: { type: 'linear', position: 'left', title: { display: true, text: labelA, color: '#2f5f8f' } },
+          yB: { type: 'linear', position: 'right', title: { display: true, text: labelB, color: '#d1622a' }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+    document.getElementById('stat-line').innerText =
+      `Correlation over the full period: ${correlationLabel(pearson(seriesA, seriesB))}`;
+  } else {
+    const points = DATA.dates.map((d, i) => ({ x: seriesA[i], y: seriesB[i] }))
+      .filter(p => p.x != null && p.y != null);
+    chart = new Chart(ctx, {
+      type: 'scatter',
+      data: { datasets: [{ label: `${labelA} vs. ${labelB}`, data: points, backgroundColor: 'rgba(47,95,143,0.45)' }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { title: { display: true, text: labelA } },
+          y: { title: { display: true, text: labelB } },
+        },
+      },
+    });
+    document.getElementById('stat-line').innerText =
+      `Correlation: ${correlationLabel(pearson(seriesA, seriesB))} — each point is one day.`;
+  }
+}
+
+document.getElementById('factorA').addEventListener('change', render);
+document.getElementById('factorB').addEventListener('change', render);
+document.getElementById('mode-timeseries').addEventListener('click', () => {
+  mode = 'timeseries';
+  document.getElementById('mode-timeseries').classList.add('active');
+  document.getElementById('mode-scatter').classList.remove('active');
+  render();
+});
+document.getElementById('mode-scatter').addEventListener('click', () => {
+  mode = 'scatter';
+  document.getElementById('mode-scatter').classList.add('active');
+  document.getElementById('mode-timeseries').classList.remove('active');
+  render();
+});
+</script>
+
+</body>
+</html>

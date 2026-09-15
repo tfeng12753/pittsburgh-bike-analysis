@@ -1,0 +1,38 @@
+# Render Blueprint - see README.md "Deploying to Render" for setup steps (GitHub token,
+# Git LFS for the model files, and how to connect this repo to Render for the first time).
+#
+# Architecture: the site is a plain Static Site (docs/ is pre-built, nothing to compile at deploy
+# time) that auto-redeploys whenever this repo's main branch changes. Two Cron Jobs push those
+# changes: one daily (fast - just re-predicts using already-trained models), one monthly (slow -
+# retrains on fresh trip data, since WPRDC only publishes new trip months monthly).
+services:
+  - type: web
+    name: pittsburgh-bike-analysis
+    runtime: static
+    staticPublishPath: docs
+    buildCommand: "true"   # docs/ is already built; nothing to compile
+    autoDeploy: true
+
+  - type: cron
+    name: daily-forecast-refresh
+    runtime: python
+    schedule: "0 10 * * *"   # 10:00 UTC daily (~6am ET / 5am ET DST-adjusted)
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash scripts/daily_cron.sh
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false   # set manually in the Render dashboard - a GitHub PAT with `repo` scope
+      - key: GITHUB_REPO
+        sync: false   # set manually, e.g. "yourusername/pittsburgh-bike-analysis"
+
+  - type: cron
+    name: monthly-full-retrain
+    runtime: python
+    schedule: "0 8 3 * *"   # 08:00 UTC on the 3rd of each month (gives WPRDC a couple days' buffer)
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash scripts/monthly_cron.sh
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false

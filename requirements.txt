@@ -1,0 +1,10 @@
+pandas
+openpyxl
+matplotlib
+jupyter
+geopandas
+shapely
+folium
+requests
+pyarrow
+scikit-learn

@@ -1,0 +1,4 @@
+# The trained models are ~70MB each after compression - track with Git LFS so they don't bloat
+# the repo's regular history. Requires `git lfs install` once locally (see README "Deploying to
+# Render" for the full one-time setup) - this file alone does nothing without that.
+data/processed/models/*.joblib filter=lfs diff=lfs merge=lfs -text

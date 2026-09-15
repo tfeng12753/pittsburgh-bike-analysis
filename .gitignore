@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Raw data can be large and is re-fetchable via src/fetch_data.py
+data/raw/
+data/processed/*.csv
+data/processed/*.parquet
+!data/processed/.gitkeep
+
+# The trained models + prediction cache DO need to be committed (tracked via Git LFS - see
+# .gitattributes) so Render's daily cron job can load them without a Render persistent disk;
+# they're what src/daily_refresh.py reads and what src/rebuild_map.py / notebooks/03 write.
+!data/processed/models/
+!data/processed/models/*.joblib
+!data/processed/models/*.parquet
+!data/processed/future_predictions_cache.parquet
