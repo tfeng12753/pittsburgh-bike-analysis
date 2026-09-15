@@ -8,3 +8,6 @@ folium
 requests
 pyarrow
 scikit-learn
+flask
+flask-cors
+gunicorn

@@ -4,7 +4,10 @@
 # Architecture: the site is a plain Static Site (docs/ is pre-built, nothing to compile at deploy
 # time) that auto-redeploys whenever this repo's main branch changes. Two Cron Jobs push those
 # changes: one daily (fast - just re-predicts using already-trained models), one monthly (slow -
-# retrains on fresh trip data, since WPRDC only publishes new trip months monthly).
+# retrains on fresh trip data, since WPRDC only publishes new trip months monthly). A fourth
+# service, a tiny always-on proxy, is what makes "Live now" genuinely live (polled client-side
+# every 5 min) instead of a snapshot baked in once a day - see proxy/app.py for why it needs to
+# exist at all (POGOH's feed doesn't send CORS headers a browser requires to read it directly).
 services:
   - type: web
     name: pittsburgh-bike-analysis
@@ -12,6 +15,15 @@ services:
     staticPublishPath: docs
     buildCommand: "true"   # docs/ is already built; nothing to compile
     autoDeploy: true
+
+  - type: web
+    name: pogoh-live-proxy
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn proxy.app:app --bind 0.0.0.0:$PORT
+    # If Render assigns this a different URL than pogoh-live-proxy.onrender.com (e.g. the name was
+    # taken), update LIVE_PROXY_URL in src/build_map.py to match and re-run src/rebuild_map.py.
 
   - type: cron
     name: daily-forecast-refresh

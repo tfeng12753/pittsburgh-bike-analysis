@@ -115,14 +115,18 @@ lightweight, dependency-minimal Leaflet map (just Leaflet itself, no plugin
 stack) with:
 
 - **Live now / Predicted mode toggle.** Live pulls real bike/dock
-  availability straight from [POGOH's public GBFS feed](https://pittsburgh.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json)
-  (no API key), broken out **by e-bike vs. classic bike** — a sub-toggle
+  availability, broken out **by e-bike vs. classic bike** — a sub-toggle
   lets you view total, e-bike-only, or classic-only availability per
   station. This split is live-only: the historical trip-data export has no
   vehicle-type column, so past e-bike usage can't be reconstructed, only
   observed in real time (see notebook section 5 for the vehicle-type
   classification: FIT/ICONIC/METRO/METRO_CONNECTED are classic bikes,
   BOOST/EFIT/COSMO/ASTRO are e-bikes, and CHLOE is actually an e-scooter).
+  "Live" is genuinely live: the page polls `proxy/app.py` (see "Deploying
+  to Render") every 5 minutes for fresh data client-side, not just whatever
+  was baked in the last time a notebook ran — see that section for why a
+  proxy is needed at all (POGOH's own [GBFS feed](https://pittsburgh.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json)
+  doesn't send the CORS header a browser requires to read it directly).
 - **A time slider** (84 steps = 7 days × 12 bi-hourly windows) in Predicted
   mode to scrub through the demand forecast at 2-hour resolution, with a
   sub-toggle for what the color represents: **net flow** (the rate a
@@ -218,8 +222,20 @@ for how that's wired up in practice.
 
 The site (`docs/`) is a static site; the two scripts above are what keep it
 current. The architecture: Render's **Static Site** auto-deploys from
-GitHub on every push, and two Render **Cron Jobs** produce those pushes on
-schedule (`render.yaml` defines all three as one Blueprint).
+GitHub on every push, two Render **Cron Jobs** produce those pushes on
+schedule, and one small always-on **Web Service** (`proxy/app.py`) is what
+makes "Live now" genuinely live rather than a once-a-day snapshot
+(`render.yaml` defines all four as one Blueprint).
+
+**Why the proxy exists**: POGOH's own GBFS feed doesn't send an
+`Access-Control-Allow-Origin` header — confirmed by hand, even requests
+that get a 200 status have no such header — so a browser blocks JavaScript
+on our site from reading it directly (CORS). The proxy does the identical
+fetch server-to-server (no CORS involved there) and re-serves it with that
+header attached; the map's own JS polls the proxy every 5 minutes. Only
+"Live now" needs this — "Predicted" is model output for the next 7 days
+and doesn't need minute-level freshness, so it stays on the daily/monthly
+cron schedule.
 
 **One-time setup, before connecting to Render:**
 
@@ -250,20 +266,32 @@ schedule (`render.yaml` defines all three as one Blueprint).
 **On Render:**
 
 4. New → Blueprint → connect the GitHub repo you just created. Render reads
-   `render.yaml` and proposes all three services (the static site + two
-   cron jobs) — approve them.
-5. For **both** cron job services, add two environment variables in the
-   Render dashboard (they're declared as `sync: false` in `render.yaml`,
-   meaning Render won't ask for them until you set them manually):
+   `render.yaml` and proposes all four services (the static site, the live
+   proxy, and the two cron jobs) — approve them.
+5. For **both** cron job services (not the proxy), add two environment
+   variables in the Render dashboard (they're declared as `sync: false` in
+   `render.yaml`, meaning Render won't ask for them until you set them
+   manually):
    - `GITHUB_TOKEN` — the personal access token from step 3.
    - `GITHUB_REPO` — `yourusername/pittsburgh-bike-analysis` (no URL, no
      `.git` suffix).
-6. Trigger each cron job manually once (Render dashboard → the job → "Run
+6. Check the URL Render assigned the **pogoh-live-proxy** service. If it's
+   not exactly `https://pogoh-live-proxy.onrender.com` (Render appends a
+   random suffix if that name was already taken by someone else), update
+   `LIVE_PROXY_URL` near the top of `src/build_map.py`'s JS template to
+   match, then run `python src/rebuild_map.py` and push the regenerated map.
+7. Trigger each cron job manually once (Render dashboard → the job → "Run
    Job") to confirm they run cleanly before waiting for their schedule.
 
-After that: the daily job keeps the forecast rolling forward every morning,
-the monthly job keeps the model itself current, and every push automatically
-redeploys the live static site — nothing else to do.
+After that: the proxy keeps "Live now" genuinely live every 5 minutes with
+no deploys involved, the daily job keeps the forecast rolling forward every
+morning, the monthly job keeps the model itself current, and every push
+automatically redeploys the static site — nothing else to do.
+
+Note the proxy is a genuinely always-on Web Service (not a cron job), so
+on Render's free tier it'll spin down after 15 minutes with no requests and
+take a few seconds to wake back up on the next visit — acceptable for a
+demo/personal project; upgrade its instance type if you want zero cold-start.
 
 **If you'd rather avoid Git LFS entirely**: Render's Private Services /
 Background Workers support persistent disks (Cron Jobs may or may not,
@@ -300,6 +328,9 @@ src/
 scripts/
   daily_cron.sh           calls daily_refresh.py, commits + pushes the updated map
   monthly_cron.sh         re-fetches + retrains + regenerates everything, commits + pushes
+proxy/
+  app.py                  tiny always-on CORS proxy for POGOH's live feed (see "Deploying to
+                           Render") - what makes "Live now" update every 5 min, not once a day
 notebooks/
   01_exploration.ipynb            ridership snapshot, station rankings, infra map
   02_ridership_over_time.ipynb    full history trends, seasonality, network growth, dow x hour heatmap
@@ -309,6 +340,6 @@ docs/
   compare.html            interactive "compare any two factors" chart builder
   data/comparison_dataset.json   daily metrics feeding compare.html
   *.png, *.html          generated charts + interactive maps (regenerated by the notebooks)
-render.yaml           Render Blueprint: static site + 2 cron jobs (see "Deploying to Render")
+render.yaml           Render Blueprint: static site + live proxy + 2 cron jobs
 .gitattributes        marks data/processed/models/*.joblib for Git LFS
 ```

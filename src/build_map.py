@@ -215,6 +215,14 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
 
 document.getElementById('live-label').innerText = DATA.live.label;
 
+// "Live now" is otherwise just a snapshot baked in whenever this file was last generated (could
+// be up to a day stale). POGOH's own GBFS feed doesn't send Access-Control-Allow-Origin, so a
+// browser can't fetch it directly (confirmed by hand) - this tiny proxy (see proxy/app.py) does
+// the same fetch server-to-server and re-serves it with CORS headers, so we can poll it here for
+// genuinely live data. If you redeployed the proxy under a different URL, update this constant.
+const LIVE_PROXY_URL = 'https://pogoh-live-proxy.onrender.com/live-status';
+const LIVE_POLL_MS = 5 * 60 * 1000;
+
 function lerpColor(t, cLow, cMid, cHigh) {
   function mix(a, b, f) { return a.map((v, i) => Math.round(v + (b[i]-v)*f)); }
   const c = t < 0 ? mix(cMid, cLow, -t) : mix(cMid, cHigh, t);
@@ -392,6 +400,42 @@ if (urlMode === 'predicted') {
 } else {
   renderLive();
 }
+
+async function refreshLiveData() {
+  try {
+    const resp = await fetch(LIVE_PROXY_URL, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`proxy returned ${resp.status}`);
+    const payload = await resp.json();
+    const values = {};
+    let maxReported = null;
+    for (const s of payload.stations) {
+      const sid = s.station_id;
+      const cap = s.capacity || (DATA.stations[sid] && DATA.stations[sid].docks) || 1;
+      const bikes = s.num_bikes_available;
+      values[sid] = {
+        bikes_available: bikes,
+        docks_available: s.num_docks_available,
+        capacity: cap,
+        pct_full: Math.round(1000 * bikes / Math.max(cap, 1)) / 10,
+        classic: s.num_classic_available,
+        ebike: s.num_ebike_available,
+      };
+      if (s.last_reported && (!maxReported || s.last_reported > maxReported)) maxReported = s.last_reported;
+    }
+    DATA.live.values = values;
+    let label = maxReported ? `Live now (${maxReported.slice(0, 16).replace('T', ' ')} UTC)` : 'Live now';
+    if (payload.stale) label += ' - proxy could not reach POGOH, showing last known data';
+    DATA.live.label = label;
+    document.getElementById('live-label').innerText = label;
+    if (mode === 'live') renderLive();
+  } catch (e) {
+    // Leave whatever was baked in at build time on screen - better than a broken page.
+    console.warn('Live refresh failed, keeping last known data:', e);
+  }
+}
+
+refreshLiveData();
+setInterval(refreshLiveData, LIVE_POLL_MS);
 </script>
 </body>
 </html>
