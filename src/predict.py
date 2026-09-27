@@ -95,18 +95,18 @@ def simulate_bike_stock(future: pd.DataFrame, live_status: pd.DataFrame, docks_b
 def save_models(rf_arrivals, rf_departures, station_hour_avg: pd.DataFrame) -> None:
     """Persist the trained models + the per-station-hour baseline they depend on, so
     src/daily_refresh.py can generate fresh predictions without re-running the ~20min training."""
-    # compress=6: these RandomForests serialize to ~250MB uncompressed each (200 trees, depth 14,
-    # 790K training rows) - compression brings that to ~70MB each, which matters a lot for keeping
-    # them in git and for how long a deploy/cron job takes to fetch them.
+    # n_estimators=200/max_depth=14 (an earlier version of this model) serialized to ~250MB
+    # uncompressed EACH and blew past Render's 512MB cron job memory limit the moment both models
+    # loaded at once - depth 14 turned out to be pure overfitting risk with no accuracy benefit
+    # (see git history / README). max_depth=10 gets ~14MB uncompressed with equal-or-better
+    # accuracy; compress=6 shrinks that further, mattering less now but still cheap insurance.
     os.makedirs(MODELS_DIR, exist_ok=True)
     joblib.dump(rf_arrivals, os.path.join(MODELS_DIR, "rf_arrivals.joblib"), compress=6)
     joblib.dump(rf_departures, os.path.join(MODELS_DIR, "rf_departures.joblib"), compress=6)
     station_hour_avg.to_parquet(os.path.join(MODELS_DIR, "station_hour_avg.parquet"))
 
 
-def load_models():
-    """Returns (rf_arrivals, rf_departures, station_hour_avg). Raises FileNotFoundError with a
-    clear message if the notebook hasn't been run yet to produce them."""
+def _model_paths():
     paths = {
         "rf_arrivals": os.path.join(MODELS_DIR, "rf_arrivals.joblib"),
         "rf_departures": os.path.join(MODELS_DIR, "rf_departures.joblib"),
@@ -119,7 +119,26 @@ def load_models():
             "notebooks/03_station_demand_prediction.ipynb at least once first (it saves these "
             "after training)."
         )
+    return paths
+
+
+def load_models():
+    """Returns (rf_arrivals, rf_departures, station_hour_avg), all loaded at once. Fine for local
+    dev; on a memory-constrained host (e.g. Render's free 512MB cron jobs) prefer load_model_lazy()
+    below so both RandomForests are never resident in memory simultaneously."""
+    paths = _model_paths()
     rf_arrivals = joblib.load(paths["rf_arrivals"])
     rf_departures = joblib.load(paths["rf_departures"])
     station_hour_avg = pd.read_parquet(paths["station_hour_avg"])
     return rf_arrivals, rf_departures, station_hour_avg
+
+
+def load_station_hour_avg() -> pd.DataFrame:
+    return pd.read_parquet(_model_paths()["station_hour_avg"])
+
+
+def load_model_lazy(which: str):
+    """Load just one model ('rf_arrivals' or 'rf_departures'). Callers that need both predictions
+    should call this, predict, `del` the model, then load the other - keeps peak memory to one
+    model at a time instead of two. This is what made daily_refresh.py fit in a 512MB cron job."""
+    return joblib.load(_model_paths()[which])

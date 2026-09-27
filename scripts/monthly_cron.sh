@@ -5,8 +5,9 @@
 # dataset), and pushes the result back to git so the Render static site auto-redeploys.
 # Requires env vars GITHUB_TOKEN (a PAT with repo scope) and GITHUB_REPO ("owner/repo").
 #
-# NOTE: this commits data/processed/models/*.joblib (~70MB each) - track those with Git LFS (see
-# README "Deploying to Render") or this will bloat the repo fast.
+# NOTE: this commits data/processed/models/*.joblib - track those with Git LFS (see README
+# "Deploying to Render"). They're small now (~15MB each after a memory-driven hyperparameter fix,
+# see git history), but LFS is harmless to keep and saves re-doing this if they grow again.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

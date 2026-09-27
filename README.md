@@ -239,11 +239,11 @@ cron schedule.
 
 **One-time setup, before connecting to Render:**
 
-1. **Git LFS for the model files.** The trained Random Forests serialize to
-   ~70MB each even compressed — committing them as plain git blobs every
-   month will bloat the repo fast. This repo's `.gitattributes` already
-   marks `data/processed/models/*.joblib` for LFS; you just need LFS
-   installed once:
+1. **Git LFS for the model files.** They're small now (~15MB each — see the
+   memory postmortem below), but LFS is harmless to keep for binary files
+   that get replaced monthly. This repo's `.gitattributes` already marks
+   `data/processed/models/*.joblib` for LFS; you just need LFS installed
+   once:
    ```bash
    git lfs install
    git add .gitattributes
@@ -292,6 +292,22 @@ Note the proxy is a genuinely always-on Web Service (not a cron job), so
 on Render's free tier it'll spin down after 15 minutes with no requests and
 take a few seconds to wake back up on the next visit — acceptable for a
 demo/personal project; upgrade its instance type if you want zero cold-start.
+
+**Postmortem: the daily job failed for 13 days with "Out of memory (used
+over 512Mi)".** The original model (`n_estimators=200, max_depth=14`)
+serialized to ~250MB *uncompressed in RAM* per model — compression only
+ever helped disk/git size, not runtime memory, and Render's free cron job
+tier caps memory at 512MB, so loading both models at once (arrivals +
+departures) blew well past it every single run, silently, with the static
+site just quietly going stale. Fixed two ways: (1) `max_depth=10` instead
+of 14 turned out to have equal-or-better accuracy (MAE 1.619 vs 1.621) at
+**14MB instead of 250MB** — depth 14 was pure overfitting risk with no
+upside; (2) `src/daily_refresh.py` now loads one model, predicts, frees it,
+then loads the other (`predict.load_model_lazy()`), rather than holding
+both in memory together. If you ever see this error again on a Render cron
+job, it's almost always "two things resident in memory that don't need to
+be simultaneously" — check the job's memory graph in the Render dashboard,
+not just whether it errored.
 
 **If you'd rather avoid Git LFS entirely**: Render's Private Services /
 Background Workers support persistent disks (Cron Jobs may or may not,
