@@ -5,6 +5,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# data/raw/ is gitignored, so each Render run starts from a fresh clone with no raw data. Fetch the
+# small inputs daily_refresh.py reads (current stations, bike-infrastructure layers, weather archive
+# + today's 16-day forecast) - everything except the large trip files and station-history snapshots.
+python src/fetch_data.py --skip-trips --skip-station-history
+
 python src/daily_refresh.py
 
 git config user.email "bot@render.com"

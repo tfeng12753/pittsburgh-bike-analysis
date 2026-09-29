@@ -202,7 +202,9 @@ directly in a browser (`open docs/index.html`, no server needed):
 Two scripts, meant to be run on a schedule (locally via cron, or on a host
 like Render — see below):
 
-- **`scripts/daily_cron.sh`** — calls `src/daily_refresh.py` (a few
+- **`scripts/daily_cron.sh`** — fetches the small raw inputs (stations,
+  infrastructure, weather + today's forecast; `data/raw/` isn't in git, so
+  a fresh Render clone has none), then calls `src/daily_refresh.py` (a few
   seconds: re-predicts the rolling 7-day window using the already-trained
   model + today's live status + weather forecast) and commits just the
   updated map file.
