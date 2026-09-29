@@ -12,14 +12,4 @@ python src/fetch_data.py --skip-trips --skip-station-history
 
 python src/daily_refresh.py
 
-git config user.email "bot@render.com"
-git config user.name "render-cron-bot"
-git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git"
-
-git add docs/station_demand_prediction_map.html
-if git diff --cached --quiet; then
-  echo "No changes to commit."
-else
-  git commit -m "chore: daily forecast refresh [skip ci]"
-  git push origin HEAD:main
-fi
+bash scripts/push_to_main.sh "chore: daily forecast refresh [skip ci]" docs/station_demand_prediction_map.html

@@ -17,14 +17,4 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/02_ridership_over_
 jupyter nbconvert --to notebook --execute --inplace notebooks/03_station_demand_prediction.ipynb
 python src/export_comparison_data.py
 
-git config user.email "bot@render.com"
-git config user.name "render-cron-bot"
-git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git"
-
-git add docs/ data/processed/models/ data/processed/future_predictions_cache.parquet notebooks/
-if git diff --cached --quiet; then
-  echo "No changes to commit."
-else
-  git commit -m "chore: monthly full retrain + chart refresh [skip ci]"
-  git push origin HEAD:main
-fi
+bash scripts/push_to_main.sh "chore: monthly full retrain + chart refresh [skip ci]" docs/ data/processed/models/ data/processed/future_predictions_cache.parquet notebooks/
